@@ -60,4 +60,4 @@ Nothing is sent to any server Beacon controls — there isn't one. Requests go s
 
 ## License
 
-No license has been set for this repository yet — all rights reserved by default until one is added.
+[MIT](LICENSE.md)
