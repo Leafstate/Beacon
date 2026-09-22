@@ -1,0 +1,1947 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Beacon — Status Dashboard</title>
+    <meta name="description" content="Track uptime and incidents across the services you depend on, in one place." />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0Ij4KICA8cGF0aCBkPSJNMTIgMkM4LjEzIDIgNSA1LjEzIDUgOWMwIDUuMjUgNyAxMyA3IDEzczctNy43NSA3LTEzYzAtMy44Ny0zLjEzLTctNy03WiIgZmlsbD0iIzRmNDZlNSIvPgogIDxjaXJjbGUgY3g9IjEyIiBjeT0iOSIgcj0iMi42IiBmaWxsPSIjZmZmZmZmIi8+Cjwvc3ZnPgo=" />
+    <style>
+/* ---------- Reset & base ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+img {
+  max-width: 100%;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---------- Theme tokens: Light ----------
+ * Soft, off-white surfaces rather than stark #fff — easier on the eyes
+ * across a page with this much bright surface area. */
+html[data-theme="light"] {
+  --bg: #f2f4f8;
+  --surface: #fbfbfd;
+  --surface-2: #eef0f5;
+  --surface-border: #e1e4eb;
+  --text-primary: #14171f;
+  --text-secondary: #565f6d;
+  --text-muted: #838c9a;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-contrast: #ffffff;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 28px -12px rgba(15, 23, 42, 0.12);
+  --radius: 14px;
+  --input-bg: #fbfbfd;
+
+  --status-operational: #16a34a;
+  --status-minor: #d97706;
+  --status-major: #ea580c;
+  --status-critical: #dc2626;
+  --status-maintenance: #2563eb;
+  --status-unknown: #94a3b8;
+}
+
+/* ---------- Theme tokens: Dark ---------- */
+html[data-theme="dark"] {
+  --bg: #0f1218;
+  --surface: #171b24;
+  --surface-2: #1e222c;
+  --surface-border: #2a2f3a;
+  --text-primary: #f2f4f8;
+  --text-secondary: #aab1c0;
+  --text-muted: #757e8f;
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-contrast: #0f1218;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px -12px rgba(0, 0, 0, 0.5);
+  --radius: 14px;
+  --input-bg: #1e222c;
+
+  --status-operational: #4ade80;
+  --status-minor: #fbbf24;
+  --status-major: #fb923c;
+  --status-critical: #f87171;
+  --status-maintenance: #60a5fa;
+  --status-unknown: #8996a8;
+}
+
+/* ---------- Layout ---------- */
+#app {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 24px 12px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.brand-text h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.brand-sub {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.last-updated {
+  margin: 4px 0 22px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  font-family: inherit;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+.btn-ghost {
+  background: var(--surface);
+  border-color: var(--surface-border);
+  color: var(--text-primary);
+}
+
+.btn-ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-small {
+  padding: 6px 10px;
+  font-size: 0.78rem;
+}
+
+.btn .icon {
+  flex-shrink: 0;
+}
+
+#refresh-btn.spinning .icon {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.theme-switch {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  gap: 2px;
+}
+
+.theme-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.theme-btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* ---------- Panels ---------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px 22px 20px;
+  margin-bottom: 22px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.panel-head h2 {
+  margin: 0 0 2px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.panel-sub {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* ---------- Legend ---------- */
+.legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* ---------- Timeline ---------- */
+.timeline-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.timeline {
+  min-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tl-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tl-row-summary {
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.tl-row-label {
+  flex: 0 0 130px;
+  width: 130px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  padding-right: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl-row-summary .tl-row-label {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.tl-row-label .favicon {
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.tl-cells {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(30, minmax(14px, 1fr));
+  gap: 4px;
+}
+
+.tl-cell {
+  display: block;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  background: var(--cell-color);
+  opacity: 0.3;
+  text-decoration: none;
+}
+
+/* Only non-operational days are links — full-strength color plus a clear
+ * hover/focus state, so "colored and clickable" always means the same thing. */
+a.tl-cell {
+  opacity: 1;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+a.tl-cell:hover,
+a.tl-cell:focus-visible {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--cell-color);
+  position: relative;
+  z-index: 1;
+  outline: none;
+}
+
+.tl-cells-loading {
+  height: 16px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-border) 25%, color-mix(in srgb, var(--surface-border) 40%, transparent) 50%, var(--surface-border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+.tl-cells-error {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.tl-axis .tl-cells {
+  align-items: start;
+}
+
+.tl-axis-cell {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ---------- Cards ---------- */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-head .favicon {
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.card-head h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.card-remove:hover {
+  opacity: 1;
+  color: var(--status-critical);
+  background: color-mix(in srgb, var(--status-critical) 12%, transparent);
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.status-none {
+  background: color-mix(in srgb, var(--status-operational) 15%, transparent);
+  color: var(--status-operational);
+}
+.status-minor {
+  background: color-mix(in srgb, var(--status-minor) 15%, transparent);
+  color: var(--status-minor);
+}
+.status-major {
+  background: color-mix(in srgb, var(--status-major) 15%, transparent);
+  color: var(--status-major);
+}
+.status-critical {
+  background: color-mix(in srgb, var(--status-critical) 15%, transparent);
+  color: var(--status-critical);
+}
+.status-unknown {
+  background: color-mix(in srgb, var(--status-unknown) 18%, transparent);
+  color: var(--text-secondary);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: currentColor;
+}
+
+.dot-maintenance {
+  background: var(--status-maintenance);
+}
+
+/* One grouped, compact line per source — a label plus small date chips,
+ * instead of a repeated full-width block per maintenance window. */
+.maintenance-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--status-maintenance) 10%, transparent);
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin: 0;
+}
+
+.maintenance-label {
+  font-weight: 600;
+}
+
+.maintenance-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.maintenance-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--status-maintenance) 20%, transparent);
+  color: var(--status-maintenance);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.maintenance-chip:hover {
+  background: color-mix(in srgb, var(--status-maintenance) 34%, transparent);
+}
+
+.maintenance-chip-more {
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+  cursor: default;
+  padding-left: 2px;
+}
+
+.no-incidents {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 2px 0;
+}
+
+.no-incidents .check {
+  color: var(--status-operational);
+  font-weight: 700;
+}
+
+.incident-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.incident {
+  background: var(--surface-2);
+  border-left: 3px solid var(--badge-color, var(--status-minor));
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.incident-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  background: color-mix(in srgb, var(--badge-color) 20%, transparent);
+  color: var(--badge-color);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.incident-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.incident-title:hover {
+  text-decoration: underline;
+}
+
+.incident-update {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
+
+.incident-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  margin: 6px 0 0;
+  text-transform: capitalize;
+}
+
+.card-error {
+  font-size: 0.82rem;
+  color: var(--status-critical);
+  margin: 0;
+}
+
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--surface-border);
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.card-footer a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.card-footer a:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Skeletons ---------- */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-border) 25%, color-mix(in srgb, var(--surface-border) 40%, transparent) 50%, var(--surface-border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 6px;
+}
+
+.skeleton-pill {
+  width: 130px;
+  height: 26px;
+  border-radius: 999px;
+}
+
+.skeleton-line {
+  height: 12px;
+  margin-top: 4px;
+}
+
+.skeleton-line.short {
+  width: 55%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ---------- Empty state ---------- */
+.empty-state {
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
+  padding: 28px 12px;
+  margin: 0;
+}
+
+/* ---------- Modal ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 20, 0.55);
+  backdrop-filter: blur(3px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.modal-backdrop:not([hidden]) {
+  display: flex;
+}
+
+.modal {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 22px 24px 24px;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.modal-close {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+}
+
+.modal-close:hover {
+  color: var(--text-primary);
+}
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.field > span {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.field em {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+.field input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.field input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.field small {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.field code {
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.76rem;
+}
+
+.modal-error {
+  background: color-mix(in srgb, var(--status-critical) 14%, transparent);
+  color: var(--status-critical);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.83rem;
+  margin-bottom: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* ---------- Toasts ---------- */
+.toast-container {
+  position: fixed;
+  right: 20px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 200;
+  max-width: min(340px, calc(100vw - 40px));
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--shadow);
+  color: var(--text-primary);
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  animation: toast-in 0.18s ease;
+}
+
+.toast-leaving {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast-action {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------- Footer ---------- */
+.app-footer {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  max-width: 620px;
+  margin: 20px auto 16px;
+  padding: 0 12px;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 640px) {
+  #app {
+    padding: 18px 14px 8px;
+  }
+
+  .panel {
+    padding: 16px 14px;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tl-row-label {
+    flex-basis: 92px;
+    width: 92px;
+    font-size: 0.72rem;
+  }
+}
+
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header class="app-header">
+        <div class="brand">
+          <span class="brand-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              <circle cx="12" cy="9" r="2.5" fill="currentColor"/>
+            </svg>
+          </span>
+          <div class="brand-text">
+            <h1>Beacon</h1>
+            <p class="brand-sub">Status &amp; incident dashboard</p>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <div class="theme-switch" role="group" aria-label="Theme">
+            <button type="button" class="theme-btn" data-theme-choice="light" aria-pressed="true">Light</button>
+            <button type="button" class="theme-btn" data-theme-choice="dark" aria-pressed="false">Dark</button>
+          </div>
+          <button type="button" id="refresh-btn" class="btn btn-ghost" title="Refresh all sources">
+            <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20 11A8 8 0 1 0 18.5 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              <path d="M20 5v6h-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Refresh</span>
+          </button>
+          <button type="button" id="add-source-btn" class="btn btn-primary">
+            <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+            </svg>
+            <span>Add source</span>
+          </button>
+        </div>
+      </header>
+
+      <p class="last-updated" id="last-updated" aria-live="polite">Loading status…</p>
+
+      <section class="panel timeline-panel" aria-labelledby="timeline-heading">
+        <div class="panel-head">
+          <div>
+            <h2 id="timeline-heading">Last 30 days</h2>
+            <p class="panel-sub">Incidents across every tracked source</p>
+          </div>
+          <ul class="legend" id="timeline-legend"></ul>
+        </div>
+        <div class="timeline-scroll">
+          <div id="timeline" class="timeline"></div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="sources-heading">
+        <div class="panel-head">
+          <div>
+            <h2 id="sources-heading">Tracked sources</h2>
+            <p class="panel-sub" id="sources-count"></p>
+          </div>
+        </div>
+        <div id="cards-grid" class="cards-grid"></div>
+      </section>
+
+      <footer class="app-footer">
+        <p>Beacon polls each provider's public status API directly from your browser. Data reflects what each provider publishes and may lag their own dashboard slightly.</p>
+      </footer>
+    </div>
+
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <div id="modal-backdrop" class="modal-backdrop" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-head">
+          <h2 id="modal-title">Add a status page</h2>
+          <button type="button" class="modal-close" id="modal-close" aria-label="Close">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <form id="add-source-form">
+          <label class="field">
+            <span>Status page URL</span>
+            <input type="text" id="source-url" name="url" placeholder="status.example.com" autocomplete="off" required />
+            <small>Works with any Statuspage-powered page, e.g. <code>status.openai.com</code> or <code>githubstatus.com</code>.</small>
+          </label>
+          <label class="field">
+            <span>Display name <em>(optional)</em></span>
+            <input type="text" id="source-name" name="name" placeholder="Auto-detected from the status page" autocomplete="off" />
+          </label>
+          <div id="modal-error" class="modal-error" hidden></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" id="modal-cancel">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="modal-submit">Add source</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script>
+(function () {
+  "use strict";
+
+    // ---------- util.js ----------
+// Small shared helpers used across the app.
+
+/** Escape a string for safe insertion into innerHTML. All third-party
+ * (status page) text must go through this before it hits the DOM. */
+function escapeHtml(value) {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Only allow http(s) URLs through to href attributes. */
+function safeHref(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
+  } catch {
+    /* ignore */
+  }
+  return "#";
+}
+
+const RTF = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+const DIVISIONS = [
+  { amount: 60, unit: "second" },
+  { amount: 60, unit: "minute" },
+  { amount: 24, unit: "hour" },
+  { amount: 7, unit: "day" },
+  { amount: 4.34524, unit: "week" },
+  { amount: 12, unit: "month" },
+  { amount: Number.POSITIVE_INFINITY, unit: "year" },
+];
+
+/** "3 minutes ago", "2 days ago", etc. */
+function relativeTime(dateInput) {
+  if (!dateInput) return "";
+  let duration = (new Date(dateInput).getTime() - Date.now()) / 1000;
+  if (Number.isNaN(duration)) return "";
+  for (const division of DIVISIONS) {
+    if (Math.abs(duration) < division.amount) {
+      return RTF.format(Math.round(duration), division.unit);
+    }
+    duration /= division.amount;
+  }
+  return "";
+}
+
+function formatDateShort(date) {
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatDateFull(date) {
+  return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+}
+
+const DATE_OPTS = { month: "short", day: "numeric" };
+const TIME_OPTS = { hour: "numeric", minute: "2-digit" };
+
+/** "Sep 20, 9:00 AM – 11:00 AM" (same day) or "Sep 20, 9:00 AM – Sep 21, 2:00 AM"
+ * (spans days). Falls back gracefully if either end is missing. */
+function formatDateTimeRange(startInput, endInput) {
+  if (!startInput) return "";
+  const start = new Date(startInput);
+  if (Number.isNaN(start.getTime())) return "";
+  const startDate = start.toLocaleDateString(undefined, DATE_OPTS);
+  const startTime = start.toLocaleTimeString(undefined, TIME_OPTS);
+
+  if (!endInput) return `${startDate}, ${startTime}`;
+  const end = new Date(endInput);
+  if (Number.isNaN(end.getTime())) return `${startDate}, ${startTime}`;
+  const endDate = end.toLocaleDateString(undefined, DATE_OPTS);
+  const endTime = end.toLocaleTimeString(undefined, TIME_OPTS);
+
+  return startDate === endDate ? `${startDate}, ${startTime} – ${endTime}` : `${startDate}, ${startTime} – ${endDate}, ${endTime}`;
+}
+
+function startOfDay(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function debounce(fn, wait) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), wait);
+  };
+}
+
+    // ---------- status.js ----------
+// Mapping between Statuspage.io's "indicator"/"impact" vocabulary and the
+// visuals we use for it. Keeping this in one place means the timeline,
+// the cards, and the legend all agree on colors and labels.
+
+const IMPACT_META = {
+  none: { label: "Operational", short: "Operational", rank: 0, cssVar: "--status-operational" },
+  minor: { label: "Degraded Performance", short: "Degraded", rank: 1, cssVar: "--status-minor" },
+  major: { label: "Partial Outage", short: "Partial Outage", rank: 2, cssVar: "--status-major" },
+  critical: { label: "Major Outage", short: "Major Outage", rank: 3, cssVar: "--status-critical" },
+  maintenance: { label: "Under Maintenance", short: "Maintenance", rank: 0.5, cssVar: "--status-maintenance" },
+  unknown: { label: "Unavailable", short: "Unknown", rank: -1, cssVar: "--status-unknown" },
+};
+
+function impactMeta(key) {
+  return IMPACT_META[key] || IMPACT_META.unknown;
+}
+
+function impactRank(key) {
+  return impactMeta(key).rank;
+}
+
+/** Statuspage summary.status.indicator -> our impact keys are the same set
+ * ("none" | "minor" | "major" | "critical"), this just guards unknown values. */
+function normalizeIndicator(indicator) {
+  return IMPACT_META[indicator] ? indicator : "unknown";
+}
+
+const LEGEND_ORDER = ["none", "minor", "major", "critical", "maintenance"];
+
+    // ---------- sources.js ----------
+// Persistence + defaults for the list of tracked status pages.
+
+const STORAGE_KEY = "beacon.sources.v1";
+const THEME_KEY = "beacon.theme.v1";
+const VALID_THEMES = ["light", "dark"];
+// Maps themes from older versions of Beacon onto the current two, so a
+// returning visitor's choice carries forward instead of silently resetting.
+const THEME_MIGRATIONS = { clean: "light", office: "dark", glass: "dark" };
+
+const DEFAULT_SOURCES = [
+  { id: "hubspot", name: "HubSpot", baseUrl: "https://status.hubspot.com", domain: "hubspot.com" },
+  { id: "shopify", name: "Shopify", baseUrl: "https://www.shopifystatus.com", domain: "shopify.com" },
+  { id: "pandadoc", name: "PandaDoc", baseUrl: "https://status.pandadoc.com", domain: "pandadoc.com" },
+  { id: "justcall", name: "JustCall", baseUrl: "https://status.justcall.io", domain: "justcall.io" },
+  { id: "asana", name: "Asana", baseUrl: "https://status.asana.com", domain: "asana.com" },
+  { id: "zapier", name: "Zapier", baseUrl: "https://status.zapier.com", domain: "zapier.com" },
+  { id: "netsuite", name: "NetSuite", baseUrl: "https://status.netsuite.com", domain: "netsuite.com" },
+];
+
+function loadSources() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return clone(DEFAULT_SOURCES);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return clone(DEFAULT_SOURCES);
+    return parsed;
+  } catch (err) {
+    console.warn("Beacon: failed to read saved sources, falling back to defaults.", err);
+    return clone(DEFAULT_SOURCES);
+  }
+}
+
+function persistSources(sources) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sources));
+  } catch (err) {
+    console.warn("Beacon: failed to save sources.", err);
+  }
+}
+
+function loadTheme() {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (VALID_THEMES.includes(saved)) return saved;
+    if (saved && THEME_MIGRATIONS[saved]) return THEME_MIGRATIONS[saved];
+    // No saved preference yet: default new visitors to their system setting.
+    if (!saved && typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches) {
+      return "dark";
+    }
+    return "light";
+  } catch {
+    return "light";
+  }
+}
+
+function persistTheme(theme) {
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    /* ignore */
+  }
+}
+
+function makeSourceId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return `src_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Best-effort guess at the company's marketing domain (for a favicon),
+ * derived from a status page hostname like "status.openai.com". */
+function deriveDomain(hostname) {
+  return hostname.replace(/^status\./i, "");
+}
+
+function clone(value) {
+  return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
+}
+
+    // ---------- api.js ----------
+// Thin wrapper around the public Statuspage.io v2 API that every one of
+// these providers (GitHub, Cloudflare, Stripe, OpenAI, Discord, Datadog,
+// and hundreds of others) exposes with CORS enabled, so it can be fetched
+// straight from the browser.
+
+const TIMEOUT_MS = 10000;
+
+async function fetchJson(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: controller.signal, headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return await res.json();
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("Request timed out");
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Normalize whatever the user typed ("status.example.com", "example.com/",
+ * "https://status.example.com/") into a clean base URL. */
+function normalizeBaseUrl(input) {
+  let value = input.trim();
+  if (!/^https?:\/\//i.test(value)) value = `https://${value}`;
+  const url = new URL(value);
+  return `${url.protocol}//${url.host}`;
+}
+
+/** Current status + any active incidents/maintenances, in one call. */
+async function fetchSummary(baseUrl) {
+  return fetchJson(`${baseUrl}/api/v2/summary.json`);
+}
+
+/** Historical incidents (most recent page), used to paint the 30-day timeline. */
+async function fetchIncidentHistory(baseUrl) {
+  const data = await fetchJson(`${baseUrl}/api/v2/incidents.json`);
+  return Array.isArray(data.incidents) ? data.incidents : [];
+}
+
+/** Historical + upcoming scheduled maintenances, used to paint maintenance
+ * windows onto the 30-day timeline. */
+async function fetchMaintenanceHistory(baseUrl) {
+  const data = await fetchJson(`${baseUrl}/api/v2/scheduled-maintenances.json`);
+  return Array.isArray(data.scheduled_maintenances) ? data.scheduled_maintenances : [];
+}
+
+/** Fetch everything Beacon needs for one source, tolerating any of the
+ * secondary calls failing (only the summary is required). */
+async function fetchSourceData(baseUrl) {
+  const [summaryResult, incidentsResult, maintenancesResult] = await Promise.allSettled([
+    fetchSummary(baseUrl),
+    fetchIncidentHistory(baseUrl),
+    fetchMaintenanceHistory(baseUrl),
+  ]);
+
+  if (summaryResult.status === "rejected") {
+    throw summaryResult.reason instanceof Error ? summaryResult.reason : new Error("Failed to load status");
+  }
+
+  return {
+    summary: summaryResult.value,
+    incidents: incidentsResult.status === "fulfilled" ? incidentsResult.value : [],
+    maintenances: maintenancesResult.status === "fulfilled" ? maintenancesResult.value : [],
+  };
+}
+
+    // ---------- timeline.js ----------
+const DAYS = 30;
+const IMPACT_KEYS = new Set(["none", "minor", "major", "critical"]);
+
+/** Flatten a source's incidents + scheduled maintenances into one list of
+ * events with a common shape, so the day-bucketing logic doesn't care which
+ * kind it's looking at. Maintenance windows always use the 'maintenance'
+ * impact/color, regardless of any severity Statuspage attaches to them. */
+function toEvents(incidents, maintenances) {
+  const incidentEvents = (incidents || []).map((inc) => ({
+    type: "incident",
+    impact: IMPACT_KEYS.has(inc.impact) ? inc.impact : "minor",
+    start: inc.created_at,
+    end: inc.resolved_at,
+    name: inc.name,
+    shortlink: inc.shortlink,
+  }));
+  const maintenanceEvents = (maintenances || []).map((m) => ({
+    type: "maintenance",
+    impact: "maintenance",
+    start: m.scheduled_for || m.started_at,
+    end: m.scheduled_until || m.resolved_at,
+    name: m.name,
+    shortlink: m.shortlink,
+  }));
+  return [...incidentEvents, ...maintenanceEvents];
+}
+
+/** Build an array of { date, impact, events[] } for the last `days` days,
+ * painting each day with the worst event impact active on that day
+ * (real incidents always outrank a same-day maintenance window). */
+function buildDayBuckets(incidents, maintenances, days = DAYS) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const buckets = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    buckets.push({ date, impact: "none", events: [] });
+  }
+  const first = buckets[0].date.getTime();
+  const byTime = new Map(buckets.map((b) => [b.date.getTime(), b]));
+
+  for (const event of toEvents(incidents, maintenances)) {
+    if (!event.start) continue;
+    const start = new Date(event.start);
+    start.setHours(0, 0, 0, 0);
+    const end = event.end ? new Date(event.end) : new Date();
+    end.setHours(0, 0, 0, 0);
+
+    const cursor = new Date(Math.max(start.getTime(), first));
+    while (cursor.getTime() <= end.getTime() && cursor.getTime() <= today.getTime()) {
+      const bucket = byTime.get(cursor.getTime());
+      if (bucket) {
+        bucket.events.push(event);
+        if (impactRank(event.impact) > impactRank(bucket.impact)) bucket.impact = event.impact;
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+
+  return buckets;
+}
+
+function mergeBuckets(allBucketSets) {
+  if (allBucketSets.length === 0) return buildDayBuckets([], []);
+  const merged = allBucketSets[0].map((b) => ({ date: b.date, impact: "none", events: [] }));
+  for (const bucketSet of allBucketSets) {
+    bucketSet.forEach((day, i) => {
+      if (impactRank(day.impact) > impactRank(merged[i].impact)) merged[i].impact = day.impact;
+      merged[i].events.push(...day.events);
+    });
+  }
+  return merged;
+}
+
+/** The event that determines a day's color — used both for the tooltip
+ * text and as the click-through target. */
+function representativeEvent(day) {
+  return day.events.find((e) => e.impact === day.impact) || day.events[0];
+}
+
+function cellTitle(day, sourceName) {
+  const prefix = sourceName ? `${sourceName} — ` : "";
+  const dateLabel = day.date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+
+  if (day.events.length === 0) {
+    return `${prefix}${dateLabel}: No incidents`;
+  }
+
+  const incidentEvents = day.events.filter((e) => e.type === "incident");
+  if (incidentEvents.length === 0) {
+    // Maintenance-only day: never name the specific products/components,
+    // just say what it is and when — the link covers the rest.
+    const maintenance = representativeEvent(day);
+    const range = maintenance ? formatDateTimeRange(maintenance.start, maintenance.end) : dateLabel;
+    return `${prefix}Scheduled maintenance — ${range}`;
+  }
+
+  const names = [...new Set(incidentEvents.map((e) => e.name))].slice(0, 4);
+  return `${prefix}${dateLabel}: ${names.join("; ")}`;
+}
+
+function renderCell(day, sourceName) {
+  const meta = impactMeta(day.impact);
+  const title = escapeHtml(cellTitle(day, sourceName));
+  const style = `style="--cell-color: var(${meta.cssVar})"`;
+
+  if (day.impact === "none") {
+    // "none" means calm, full stop — even if Statuspage logged a trivial,
+    // no-visible-impact entry that day. Keeping this uniform avoids a
+    // second, non-clickable shade of green that looks meaningful but isn't;
+    // the detail is still available on hover via the tooltip.
+    return `<span class="tl-cell" ${style} title="${title}"></span>`;
+  }
+
+  // Anything other than operational is a link straight to that
+  // announcement on the source's own status page.
+  const event = representativeEvent(day);
+  const href = safeHref(event?.shortlink || "#");
+  return `<a class="tl-cell" href="${href}" target="_blank" rel="noopener noreferrer" ${style} title="${title}" aria-label="${title}"></a>`;
+}
+
+function renderRow({ label, avatarHtml, buckets, isSummary = false }) {
+  const cells = buckets.map((day) => renderCell(day, label)).join("");
+
+  return `
+    <div class="tl-row ${isSummary ? "tl-row-summary" : ""}">
+      <div class="tl-row-label">
+        ${avatarHtml || ""}
+        <span>${escapeHtml(label)}</span>
+      </div>
+      <div class="tl-cells">${cells}</div>
+    </div>`;
+}
+
+function renderAxis(buckets) {
+  const cells = buckets
+    .map((day, i) => {
+      const showLabel = i === 0 || i === buckets.length - 1 || day.date.getDate() === 1 || i % 6 === 0;
+      const label = showLabel ? day.date.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+      return `<span class="tl-axis-cell">${escapeHtml(label)}</span>`;
+    })
+    .join("");
+  return `<div class="tl-row tl-axis"><div class="tl-row-label"></div><div class="tl-cells">${cells}</div></div>`;
+}
+
+function renderLegend(container) {
+  container.innerHTML = LEGEND_ORDER.map((key) => {
+    const meta = impactMeta(key);
+    return `<li><span class="legend-swatch" style="background: var(${meta.cssVar})"></span>${escapeHtml(meta.short)}</li>`;
+  }).join("");
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {HTMLElement} legendContainer
+ * @param {Array<{source: object, status: string, incidents: object[], maintenances: object[], faviconHtml: string}>} entries
+ */
+function renderTimeline(container, legendContainer, entries) {
+  renderLegend(legendContainer);
+
+  if (entries.length === 0) {
+    container.innerHTML = `<p class="empty-state">Add a source to see its incident history here.</p>`;
+    return;
+  }
+
+  const perSource = entries.map((entry) => {
+    const buckets = buildDayBuckets(entry.incidents, entry.maintenances);
+    return { name: entry.source.name, avatarHtml: entry.faviconHtml, buckets, status: entry.status };
+  });
+
+  const readyBucketSets = perSource.filter((s) => s.status === "ready").map((s) => s.buckets);
+  const summaryBuckets = mergeBuckets(readyBucketSets.length ? readyBucketSets : [buildDayBuckets([], [])]);
+
+  const rows = [];
+  rows.push(renderRow({ label: "All sources", buckets: summaryBuckets, isSummary: true }));
+  for (const s of perSource) {
+    if (s.status === "loading") {
+      rows.push(`
+        <div class="tl-row">
+          <div class="tl-row-label">${s.avatarHtml || ""}<span>${escapeHtml(s.name)}</span></div>
+          <div class="tl-cells tl-cells-loading"></div>
+        </div>`);
+    } else if (s.status === "error") {
+      rows.push(`
+        <div class="tl-row">
+          <div class="tl-row-label">${s.avatarHtml || ""}<span>${escapeHtml(s.name)}</span></div>
+          <div class="tl-cells tl-cells-error">Unavailable</div>
+        </div>`);
+    } else {
+      rows.push(renderRow({ label: s.name, avatarHtml: s.avatarHtml, buckets: s.buckets }));
+    }
+  }
+  rows.push(renderAxis(summaryBuckets));
+
+  container.innerHTML = rows.join("");
+}
+
+    // ---------- cards.js ----------
+function faviconHtml(source, size = 20) {
+  const domain = escapeHtml(source.domain || new URL(source.baseUrl).hostname);
+  const src = `https://www.google.com/s2/favicons?sz=${size * 2}&domain=${domain}`;
+  return `<img class="favicon" width="${size}" height="${size}" src="${src}" alt="" loading="lazy" onerror="this.style.visibility='hidden'" />`;
+}
+
+function sourceFaviconHtml(source) {
+  return faviconHtml(source, 18);
+}
+
+function incidentUpdateSnippet(incident) {
+  const latest = incident.incident_updates?.[0];
+  if (!latest) return "";
+  const body = latest.body?.length > 160 ? `${latest.body.slice(0, 157)}…` : latest.body;
+  return `<p class="incident-update">${escapeHtml(body)}</p>`;
+}
+
+function renderIncident(incident) {
+  const meta = impactMeta(incident.impact || "minor");
+  const statusLabel = (incident.status || "investigating").replace(/_/g, " ");
+  return `
+    <li class="incident">
+      <div class="incident-head">
+        <span class="badge" style="--badge-color: var(${meta.cssVar})">${escapeHtml(meta.short)}</span>
+        <a href="${safeHref(incident.shortlink || "#")}" target="_blank" rel="noopener noreferrer" class="incident-title">
+          ${escapeHtml(incident.name)}
+        </a>
+      </div>
+      ${incidentUpdateSnippet(incident)}
+      <p class="incident-meta">
+        <span class="incident-status">${escapeHtml(capitalize(statusLabel))}</span>
+        &middot;
+        <span>${escapeHtml(relativeTime(incident.updated_at || incident.created_at))}</span>
+      </p>
+    </li>`;
+}
+
+function capitalize(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+const MAX_VISIBLE_MAINTENANCE = 4;
+
+/** "Sep 18" or "Sep 18–20" — a compact label for the chip itself. The full
+ * date+time range still lives in the chip's title/tooltip. */
+function shortMaintenanceLabel(startInput, endInput) {
+  if (!startInput) return "";
+  const dateOpts = { month: "short", day: "numeric" };
+  const start = new Date(startInput).toLocaleDateString(undefined, dateOpts);
+  if (!endInput) return start;
+  const end = new Date(endInput).toLocaleDateString(undefined, dateOpts);
+  return start === end ? start : `${start}–${end}`;
+}
+
+/** One compact, grouped line per source instead of a repeated full-width
+ * block per maintenance window — deliberately generic (no product/component
+ * names, just what it is and when), with each date chip linking to its own
+ * announcement. */
+function renderMaintenanceBadges(maintenances) {
+  if (!maintenances || maintenances.length === 0) return "";
+
+  const visible = maintenances.slice(0, MAX_VISIBLE_MAINTENANCE);
+  const overflowCount = maintenances.length - visible.length;
+
+  const chips = visible
+    .map((m) => {
+      const full = formatDateTimeRange(m.scheduled_for, m.scheduled_until);
+      const short = shortMaintenanceLabel(m.scheduled_for, m.scheduled_until);
+      return `<a class="maintenance-chip" href="${safeHref(m.shortlink || "#")}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(full)}">${escapeHtml(short)}</a>`;
+    })
+    .join("");
+
+  const overflowChip = overflowCount > 0 ? `<span class="maintenance-chip maintenance-chip-more">+${overflowCount} more</span>` : "";
+
+  return `
+    <div class="maintenance-group">
+      <span class="dot dot-maintenance"></span>
+      <span class="maintenance-label">Scheduled maintenance</span>
+      <span class="maintenance-dates">${chips}${overflowChip}</span>
+    </div>`;
+}
+
+function renderCardBody(source, state) {
+  if (state.status === "loading") {
+    return `
+      <div class="card-body">
+        <div class="skeleton skeleton-pill"></div>
+        <div class="skeleton skeleton-line"></div>
+        <div class="skeleton skeleton-line short"></div>
+      </div>`;
+  }
+
+  if (state.status === "error") {
+    return `
+      <div class="card-body">
+        <p class="status-pill status-unknown">
+          <span class="dot dot-unknown"></span>
+          Couldn't load status
+        </p>
+        <p class="card-error">${escapeHtml(state.error?.message || "Something went wrong.")}</p>
+        <button type="button" class="btn btn-ghost btn-small" data-action="retry" data-id="${escapeHtml(source.id)}">
+          Retry
+        </button>
+      </div>`;
+  }
+
+  const { summary } = state;
+  const indicator = normalizeIndicator(summary.status?.indicator);
+  const meta = impactMeta(indicator);
+  const incidents = summary.incidents || [];
+  const maintenances = summary.scheduled_maintenances || [];
+
+  const incidentsHtml =
+    incidents.length > 0
+      ? `<ul class="incident-list">${incidents.map(renderIncident).join("")}</ul>`
+      : `<p class="no-incidents"><span class="check">✓</span> No active incidents</p>`;
+
+  return `
+    <div class="card-body">
+      <p class="status-pill status-${indicator}">
+        <span class="dot dot-${indicator}"></span>
+        ${escapeHtml(summary.status?.description || meta.label)}
+      </p>
+      ${renderMaintenanceBadges(maintenances)}
+      ${incidentsHtml}
+    </div>
+    <div class="card-footer">
+      <span>${state.lastUpdated ? `Updated ${escapeHtml(relativeTime(state.lastUpdated))}` : ""}</span>
+      <a href="${safeHref(source.baseUrl)}" target="_blank" rel="noopener noreferrer">Status page ↗</a>
+    </div>`;
+}
+
+function renderCards(container, sources, dataStore) {
+  if (sources.length === 0) {
+    container.innerHTML = `<p class="empty-state">You're not tracking any sources yet. Click "Add source" to get started.</p>`;
+    return;
+  }
+
+  container.innerHTML = sources
+    .map((source) => {
+      const state = dataStore.get(source.id) || { status: "loading" };
+      return `
+        <article class="card" data-id="${escapeHtml(source.id)}">
+          <div class="card-head">
+            ${faviconHtml(source)}
+            <h3>${escapeHtml(source.name)}</h3>
+            <button type="button" class="card-remove" data-action="remove" data-id="${escapeHtml(source.id)}" aria-label="Remove ${escapeHtml(source.name)}" title="Remove source">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          ${renderCardBody(source, state)}
+        </article>`;
+    })
+    .join("");
+}
+
+    // ---------- toast.js ----------
+const toastContainer = () => document.getElementById("toast-container");
+
+/**
+ * @param {string} message
+ * @param {{ actionLabel?: string, onAction?: () => void, duration?: number }} [opts]
+ */
+function showToast(message, opts = {}) {
+  const { actionLabel, onAction, duration = 5000 } = opts;
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.innerHTML = `
+    <span>${escapeHtml(message)}</span>
+    ${actionLabel ? `<button type="button" class="toast-action">${escapeHtml(actionLabel)}</button>` : ""}
+  `;
+  toastContainer().appendChild(el);
+
+  const remove = () => {
+    el.classList.add("toast-leaving");
+    setTimeout(() => el.remove(), 200);
+  };
+
+  if (actionLabel && onAction) {
+    el.querySelector(".toast-action").addEventListener("click", () => {
+      onAction();
+      remove();
+    });
+  }
+
+  const timer = setTimeout(remove, duration);
+  el.addEventListener("mouseenter", () => clearTimeout(timer));
+}
+
+    // ---------- modal.js ----------
+/** Wires up the "Add source" modal. Calls onSubmit({ url, name }) and lets
+ * the caller decide whether/how to close (closeModal) or show an error. */
+function initAddSourceModal({ onSubmit }) {
+  const backdrop = document.getElementById("modal-backdrop");
+  const form = document.getElementById("add-source-form");
+  const urlInput = document.getElementById("source-url");
+  const nameInput = document.getElementById("source-name");
+  const errorBox = document.getElementById("modal-error");
+  const submitBtn = document.getElementById("modal-submit");
+  const openBtn = document.getElementById("add-source-btn");
+
+  function open() {
+    backdrop.hidden = false;
+    errorBox.hidden = true;
+    form.reset();
+    requestAnimationFrame(() => urlInput.focus());
+    document.addEventListener("keydown", onKeydown);
+  }
+
+  function close() {
+    backdrop.hidden = true;
+    document.removeEventListener("keydown", onKeydown);
+  }
+
+  function onKeydown(e) {
+    if (e.key === "Escape") close();
+  }
+
+  function setBusy(busy) {
+    submitBtn.disabled = busy;
+    submitBtn.textContent = busy ? "Adding…" : "Add source";
+  }
+
+  function showError(message) {
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  openBtn.addEventListener("click", open);
+  document.getElementById("modal-close").addEventListener("click", close);
+  document.getElementById("modal-cancel").addEventListener("click", close);
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) close();
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorBox.hidden = true;
+    setBusy(true);
+    try {
+      await onSubmit({ url: urlInput.value, name: nameInput.value.trim() });
+      close();
+    } catch (err) {
+      showError(err.message || "Couldn't add that source.");
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  return { open, close };
+}
+
+    // ---------- theme.js ----------
+function initTheme() {
+  const theme = loadTheme();
+  applyTheme(theme);
+
+  const buttons = document.querySelectorAll("[data-theme-choice]");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      applyTheme(btn.dataset.themeChoice);
+      persistTheme(btn.dataset.themeChoice);
+    });
+  });
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  document.querySelectorAll("[data-theme-choice]").forEach((btn) => {
+    btn.setAttribute("aria-pressed", String(btn.dataset.themeChoice === theme));
+  });
+}
+
+    // ---------- main.js ----------
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
+/** @type {Array<{id:string,name:string,baseUrl:string,domain?:string}>} */
+let sources = loadSources();
+/** @type {Map<string, {status:'loading'|'ready'|'error', summary?:object, incidents?:object[], maintenances?:object[], error?:Error, lastUpdated?:Date}>} */
+const dataStore = new Map();
+
+const cardsGrid = document.getElementById("cards-grid");
+const timelineEl = document.getElementById("timeline");
+const legendEl = document.getElementById("timeline-legend");
+const lastUpdatedEl = document.getElementById("last-updated");
+const sourcesCountEl = document.getElementById("sources-count");
+const refreshBtn = document.getElementById("refresh-btn");
+
+function renderAll() {
+  renderCards(cardsGrid, sources, dataStore);
+  renderTimeline(
+    timelineEl,
+    legendEl,
+    sources.map((source) => {
+      const state = dataStore.get(source.id) || { status: "loading" };
+      return {
+        source,
+        status: state.status,
+        incidents: state.incidents || [],
+        maintenances: state.maintenances || [],
+        faviconHtml: sourceFaviconHtml(source),
+      };
+    }),
+  );
+  sourcesCountEl.textContent = sources.length
+    ? `Tracking ${sources.length} source${sources.length === 1 ? "" : "s"}`
+    : "No sources tracked yet";
+  updateLastUpdatedLabel();
+}
+
+function updateLastUpdatedLabel() {
+  const times = sources
+    .map((s) => dataStore.get(s.id)?.lastUpdated)
+    .filter(Boolean)
+    .map((d) => d.getTime());
+  if (times.length === 0) {
+    lastUpdatedEl.textContent = sources.length ? "Loading status…" : "";
+    return;
+  }
+  const oldest = new Date(Math.min(...times));
+  lastUpdatedEl.textContent = `Last updated ${relativeTime(oldest)}`;
+}
+
+async function refreshSource(source) {
+  dataStore.set(source.id, { ...(dataStore.get(source.id) || {}), status: "loading" });
+  renderAll();
+  try {
+    const { summary, incidents, maintenances } = await fetchSourceData(source.baseUrl);
+    dataStore.set(source.id, { status: "ready", summary, incidents, maintenances, lastUpdated: new Date() });
+
+    // Fill in a nicer display name the first time we hear back, if the
+    // user didn't give us one explicitly.
+    if (summary.page?.name && source.__autoNamed) {
+      source.name = summary.page.name;
+      persistSources(sources);
+    }
+  } catch (err) {
+    dataStore.set(source.id, { status: "error", error: err });
+  }
+  renderAll();
+}
+
+async function refreshAll() {
+  refreshBtn.classList.add("spinning");
+  await Promise.allSettled(sources.map((s) => refreshSource(s)));
+  refreshBtn.classList.remove("spinning");
+}
+
+function removeSource(id) {
+  const index = sources.findIndex((s) => s.id === id);
+  if (index === -1) return;
+  const [removed] = sources.splice(index, 1);
+  dataStore.delete(id);
+  persistSources(sources);
+  renderAll();
+
+  showToast(`Removed ${removed.name}`, {
+    actionLabel: "Undo",
+    onAction: () => {
+      sources.splice(index, 0, removed);
+      persistSources(sources);
+      renderAll();
+      refreshSource(removed);
+    },
+  });
+}
+
+async function addSource({ url, name }) {
+  if (!url.trim()) throw new Error("Enter a status page URL.");
+
+  let baseUrl;
+  try {
+    baseUrl = normalizeBaseUrl(url);
+  } catch {
+    throw new Error("That doesn't look like a valid URL.");
+  }
+
+  if (sources.some((s) => s.baseUrl.toLowerCase() === baseUrl.toLowerCase())) {
+    throw new Error("You're already tracking that source.");
+  }
+
+  const hostname = new URL(baseUrl).hostname;
+  const source = {
+    id: makeSourceId(),
+    name: name || hostname,
+    baseUrl,
+    domain: deriveDomain(hostname),
+    __autoNamed: !name,
+  };
+
+  // Validate it looks like a real Statuspage-backed page before committing,
+  // so a typo doesn't leave a permanently broken card behind.
+  try {
+    const { summary, incidents, maintenances } = await fetchSourceData(baseUrl);
+    if (summary.page?.name && !name) source.name = summary.page.name;
+    sources.push(source);
+    dataStore.set(source.id, { status: "ready", summary, incidents, maintenances, lastUpdated: new Date() });
+    persistSources(sources);
+    renderAll();
+    showToast(`Now tracking ${source.name}`);
+  } catch (err) {
+    throw new Error(
+      `Couldn't reach that status page (${err.message}). Double-check the URL, or that it's a Statuspage-powered page with public CORS access.`,
+    );
+  }
+}
+
+function wireCardActions() {
+  cardsGrid.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-action]");
+    if (!btn) return;
+    const { action, id } = btn.dataset;
+    if (action === "remove") removeSource(id);
+    if (action === "retry") {
+      const source = sources.find((s) => s.id === id);
+      if (source) refreshSource(source);
+    }
+  });
+}
+
+function init() {
+  initTheme();
+  wireCardActions();
+  initAddSourceModal({ onSubmit: addSource });
+
+  refreshBtn.addEventListener("click", refreshAll);
+
+  renderAll();
+  refreshAll();
+  setInterval(refreshAll, REFRESH_INTERVAL_MS);
+  setInterval(updateLastUpdatedLabel, 30000);
+}
+
+init();
+
+})();
+
+    </script>
+  </body>
+</html>
