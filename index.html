@@ -68,6 +68,7 @@ html[data-theme="light"] {
   --status-critical: #dc2626;
   --status-maintenance: #2563eb;
   --status-unknown: #94a3b8;
+  --status-flagged: #c026d3;
 }
 
 /* ---------- Theme tokens: Dark ---------- */
@@ -92,6 +93,7 @@ html[data-theme="dark"] {
   --status-critical: #f87171;
   --status-maintenance: #60a5fa;
   --status-unknown: #8996a8;
+  --status-flagged: #e879f9;
 }
 
 /* ---------- Layout ---------- */
@@ -421,6 +423,15 @@ a.tl-cell:focus-visible {
   gap: 10px;
 }
 
+/* A source whose feed contains an anomalous (non-human-readable / encoded)
+ * incident or maintenance entry — see anomaly.js. Deliberately a different
+ * color from every severity status so "flagged" never reads as "outage". */
+.card-flagged {
+  border-color: var(--status-flagged);
+  background: color-mix(in srgb, var(--status-flagged) 5%, var(--surface));
+  box-shadow: 0 0 0 1px var(--status-flagged), var(--shadow);
+}
+
 .card-head {
   display: flex;
   align-items: center;
@@ -498,6 +509,10 @@ a.tl-cell:focus-visible {
 .status-unknown {
   background: color-mix(in srgb, var(--status-unknown) 18%, transparent);
   color: var(--text-secondary);
+}
+.status-flagged {
+  background: color-mix(in srgb, var(--status-flagged) 16%, transparent);
+  color: var(--status-flagged);
 }
 
 .dot {
@@ -644,6 +659,47 @@ a.tl-cell:focus-visible {
   font-size: 0.82rem;
   color: var(--status-critical);
   margin: 0;
+}
+
+/* Explanation banner shown when anomaly.js flags an incident/maintenance
+ * entry as looking like an encoded payload rather than normal status text. */
+.flag-notice {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--status-flagged) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-flagged) 35%, transparent);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.flag-notice .flag-icon {
+  flex-shrink: 0;
+  color: var(--status-flagged);
+  margin-top: 1px;
+}
+
+.flag-notice strong {
+  color: var(--status-flagged);
+}
+
+.flag-notice code {
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.76rem;
+}
+
+.flag-notice-detail {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  word-break: break-all;
 }
 
 .card-footer {
@@ -1135,6 +1191,7 @@ const IMPACT_META = {
   critical: { label: "Major Outage", short: "Major Outage", rank: 3, cssVar: "--status-critical" },
   maintenance: { label: "Under Maintenance", short: "Maintenance", rank: 0.5, cssVar: "--status-maintenance" },
   unknown: { label: "Unavailable", short: "Unknown", rank: -1, cssVar: "--status-unknown" },
+  flagged: { label: "Flagged data", short: "Flagged", rank: 4, cssVar: "--status-flagged" },
 };
 
 function impactMeta(key) {
@@ -1152,6 +1209,62 @@ function normalizeIndicator(indicator) {
 }
 
 const LEGEND_ORDER = ["none", "minor", "major", "critical", "maintenance"];
+
+    // ---------- anomaly.js ----------
+// Statuspage incident/maintenance fields (name, update bodies) are meant to
+// be short, human-written sentences. A "key:base64string" shape — a bare
+// identifier, a colon, and a long run of base64 characters with no spaces —
+// is not something a person writing a status update produces; it looks like
+// machine-generated or smuggled data instead. Rather than render that as if
+// it were a normal update, Beacon flags it and explains why. This is a
+// heuristic, not a security boundary: flagged text is still only ever
+// inserted via escapeHtml (see util.js), so nothing here is ever executed
+// either way, flagged or not.
+const ENCODED_PAYLOAD_PATTERN = /\b([a-zA-Z_][\w-]{1,40}):([A-Za-z0-9+/]{16,}={0,2})\b/g;
+
+/** Distinct "key" prefixes in `text` that look like an encoded payload
+ * (e.g. "_system_metadata" for "_system_metadata:eyJ1cHRpbWU..."). */
+function findEncodedPayloadKeys(text) {
+  if (!text) return [];
+  const keys = new Set();
+  for (const match of text.matchAll(ENCODED_PAYLOAD_PATTERN)) {
+    keys.add(match[1]);
+  }
+  return [...keys];
+}
+
+/** Scans one incident or scheduled maintenance's name + update bodies.
+ * Returns { flagged, keys, sample }; sample is the first matching field's
+ * raw text, for display in the explanation banner. */
+function scanEventForAnomaly(event) {
+  const fields = [event.name, ...(event.incident_updates || []).map((u) => u.body)];
+  const keys = new Set();
+  let sample = "";
+  for (const field of fields) {
+    const found = findEncodedPayloadKeys(field);
+    if (found.length > 0) {
+      found.forEach((k) => keys.add(k));
+      if (!sample) sample = field;
+    }
+  }
+  return { flagged: keys.size > 0, keys: [...keys], sample };
+}
+
+/** First anomalous incident/maintenance in a source's summary, or null if
+ * nothing there looks encoded. */
+function findAnomaly(summary) {
+  const events = [...(summary?.incidents || []), ...(summary?.scheduled_maintenances || [])];
+  for (const event of events) {
+    const result = scanEventForAnomaly(event);
+    if (result.flagged) return result;
+  }
+  return null;
+}
+
+/** Whether a card's current data should render in the "flagged" state. */
+function cardAnomaly(state) {
+  return state.status === "ready" ? findAnomaly(state.summary) : null;
+}
 
     // ---------- sources.js ----------
 // Persistence + defaults for the list of tracked status pages.
@@ -1521,7 +1634,8 @@ function incidentUpdateSnippet(incident) {
 }
 
 function renderIncident(incident) {
-  const meta = impactMeta(incident.impact || "minor");
+  const anomaly = scanEventForAnomaly(incident);
+  const meta = anomaly.flagged ? impactMeta("flagged") : impactMeta(incident.impact || "minor");
   const statusLabel = (incident.status || "investigating").replace(/_/g, " ");
   return `
     <li class="incident">
@@ -1585,6 +1699,22 @@ function renderMaintenanceBadges(maintenances) {
     </div>`;
 }
 
+/** Explanation banner shown on a flagged card — see anomaly.js. */
+function renderFlagNotice(anomaly) {
+  const keyList = anomaly.keys.map((k) => `<code>${escapeHtml(k)}</code>`).join(", ");
+  const sample = anomaly.sample.length > 140 ? `${anomaly.sample.slice(0, 137)}…` : anomaly.sample;
+  return `
+    <div class="flag-notice">
+      <svg class="flag-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>
+        <strong>Flagged:</strong> this source's status feed contains text that looks like an encoded payload (${keyList}) rather than a normal, human-written update. Beacon renders it as inert text only — never decoded or executed — but this is unusual for a status page and may indicate a bug or anomaly on the provider's side. Verify directly on their status page before trusting it.
+        <span class="flag-notice-detail">${escapeHtml(sample)}</span>
+      </span>
+    </div>`;
+}
+
 function renderCardBody(source, state) {
   if (state.status === "loading") {
     return `
@@ -1614,6 +1744,7 @@ function renderCardBody(source, state) {
   const meta = impactMeta(indicator);
   const incidents = summary.incidents || [];
   const maintenances = summary.scheduled_maintenances || [];
+  const anomaly = findAnomaly(summary);
 
   const incidentsHtml =
     incidents.length > 0
@@ -1622,6 +1753,7 @@ function renderCardBody(source, state) {
 
   return `
     <div class="card-body">
+      ${anomaly ? renderFlagNotice(anomaly) : ""}
       <p class="status-pill status-${indicator}">
         <span class="dot dot-${indicator}"></span>
         ${escapeHtml(summary.status?.description || meta.label)}
@@ -1644,8 +1776,9 @@ function renderCards(container, sources, dataStore) {
   container.innerHTML = sources
     .map((source) => {
       const state = dataStore.get(source.id) || { status: "loading" };
+      const flaggedClass = cardAnomaly(state) ? " card-flagged" : "";
       return `
-        <article class="card" data-id="${escapeHtml(source.id)}">
+        <article class="card${flaggedClass}" data-id="${escapeHtml(source.id)}">
           <div class="card-head">
             ${faviconHtml(source)}
             <h3>${escapeHtml(source.name)}</h3>
