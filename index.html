@@ -1634,8 +1634,7 @@ function incidentUpdateSnippet(incident) {
 }
 
 function renderIncident(incident) {
-  const anomaly = scanEventForAnomaly(incident);
-  const meta = anomaly.flagged ? impactMeta("flagged") : impactMeta(incident.impact || "minor");
+  const meta = impactMeta(incident.impact || "minor");
   const statusLabel = (incident.status || "investigating").replace(/_/g, " ");
   return `
     <li class="incident">
@@ -1740,11 +1739,26 @@ function renderCardBody(source, state) {
   }
 
   const { summary } = state;
+  const anomaly = findAnomaly(summary);
+
+  // Flagged data takes over the whole card: no status pill, no maintenance
+  // badges, no incident list — anything from a feed that's already shown
+  // us one non-human-readable entry isn't trustworthy enough to keep
+  // displaying at face value. The notice (plus its inert raw-text sample)
+  // is the only thing rendered besides the footer, so you can still jump
+  // to the provider's own page and check for yourself.
+  if (anomaly) {
+    return `
+      <div class="card-body">
+        ${renderFlagNotice(anomaly)}
+      </div>
+      ${renderCardFooter(source, state)}`;
+  }
+
   const indicator = normalizeIndicator(summary.status?.indicator);
   const meta = impactMeta(indicator);
   const incidents = summary.incidents || [];
   const maintenances = summary.scheduled_maintenances || [];
-  const anomaly = findAnomaly(summary);
 
   const incidentsHtml =
     incidents.length > 0
@@ -1753,7 +1767,6 @@ function renderCardBody(source, state) {
 
   return `
     <div class="card-body">
-      ${anomaly ? renderFlagNotice(anomaly) : ""}
       <p class="status-pill status-${indicator}">
         <span class="dot dot-${indicator}"></span>
         ${escapeHtml(summary.status?.description || meta.label)}
@@ -1761,6 +1774,11 @@ function renderCardBody(source, state) {
       ${renderMaintenanceBadges(maintenances)}
       ${incidentsHtml}
     </div>
+    ${renderCardFooter(source, state)}`;
+}
+
+function renderCardFooter(source, state) {
+  return `
     <div class="card-footer">
       <span>${state.lastUpdated ? `Updated ${escapeHtml(relativeTime(state.lastUpdated))}` : ""}</span>
       <a href="${safeHref(source.baseUrl)}" target="_blank" rel="noopener noreferrer">Status page ↗</a>
