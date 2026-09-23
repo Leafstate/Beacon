@@ -194,6 +194,12 @@ html[data-theme="dark"] {
   color: var(--accent);
 }
 
+.btn-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .btn-small {
   padding: 6px 10px;
   font-size: 0.78rem;
@@ -998,6 +1004,13 @@ a.tl-cell:focus-visible {
             <button type="button" class="theme-btn" data-theme-choice="light" aria-pressed="true">Light</button>
             <button type="button" class="theme-btn" data-theme-choice="dark" aria-pressed="false">Dark</button>
           </div>
+          <button type="button" id="notify-btn" class="btn btn-ghost" title="Get a browser notification when a tracked source's status changes while this tab isn't focused">
+            <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span id="notify-btn-label">Alerts off</span>
+          </button>
           <button type="button" id="refresh-btn" class="btn btn-ghost" title="Refresh all sources">
             <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M20 11A8 8 0 1 0 18.5 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -1845,6 +1858,200 @@ function showToast(message, opts = {}) {
   el.addEventListener("mouseenter", () => clearTimeout(timer));
 }
 
+    // ---------- attention.js ----------
+// Grabs attention on the tab itself when something changes while the user
+// isn't looking at it — a flashing document title plus a red dot badged
+// onto the favicon, both cleared the instant the tab is focused again.
+// Needs no permission and works in every browser, unlike the Notification
+// API in alerts.js.
+const ORIGINAL_TITLE = document.title;
+const ORIGINAL_FAVICON = document.querySelector('link[rel="icon"]');
+const ORIGINAL_FAVICON_HREF = ORIGINAL_FAVICON.href;
+
+let titleFlashTimer = null;
+let titleFlashOn = false;
+let faviconBadged = false;
+
+function isTabHidden() {
+  return document.hidden || !document.hasFocus();
+}
+
+function startTitleFlash(message) {
+  if (titleFlashTimer) return;
+  titleFlashOn = true;
+  document.title = `🔴 ${message}`;
+  titleFlashTimer = setInterval(() => {
+    titleFlashOn = !titleFlashOn;
+    document.title = titleFlashOn ? `🔴 ${message}` : ORIGINAL_TITLE;
+  }, 1500);
+}
+
+function stopTitleFlash() {
+  if (!titleFlashTimer) return;
+  clearInterval(titleFlashTimer);
+  titleFlashTimer = null;
+  document.title = ORIGINAL_TITLE;
+}
+
+/** Draws a red dot over the existing favicon (a data: URL, so this never
+ * touches the network or taints the canvas) and swaps it in. */
+function setFaviconBadge(active) {
+  if (active === faviconBadged) return;
+  faviconBadged = active;
+
+  if (!active) {
+    ORIGINAL_FAVICON.href = ORIGINAL_FAVICON_HREF;
+    return;
+  }
+
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+
+    const radius = img.width * 0.3;
+    const cx = img.width - radius * 0.7;
+    const cy = radius * 0.7;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = "#dc2626";
+    ctx.fill();
+    ctx.lineWidth = img.width * 0.08;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+
+    ORIGINAL_FAVICON.href = canvas.toDataURL("image/png");
+  };
+  img.src = ORIGINAL_FAVICON_HREF;
+}
+
+/** Call when something changed and the tab isn't focused — flashes the
+ * title and badges the favicon until the user comes back to look. */
+function grabAttention(message) {
+  if (!isTabHidden()) return;
+  startTitleFlash(message);
+  setFaviconBadge(true);
+}
+
+function clearAttention() {
+  stopTitleFlash();
+  setFaviconBadge(false);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) clearAttention();
+});
+window.addEventListener("focus", clearAttention);
+
+    // ---------- alerts.js ----------
+// Detects when a tracked source's status genuinely changes between polls
+// (not on first load) and routes that into a toast (always), the in-tab
+// attention-grabber above (when the tab isn't focused), and an optional
+// native browser Notification (only once the user has explicitly opted in,
+// since requesting permission without a click is blocked by browsers
+// anyway and would be rude even where it isn't).
+const NOTIFY_KEY = "beacon.notify.v1";
+
+/** Compares a source's previous ready state to its freshly fetched summary.
+ * Returns a small description of what changed, or null if nothing did (or
+ * there was no previous state to compare against, e.g. first load). */
+function detectStatusChange(previousState, nextSummary) {
+  if (!previousState || previousState.status !== "ready") return null;
+
+  const prevIndicator = previousState.summary?.status?.indicator || "none";
+  const nextIndicator = nextSummary.status?.indicator || "none";
+  if (nextIndicator !== prevIndicator) {
+    return { type: "indicator", to: nextIndicator };
+  }
+
+  const prevIds = new Set((previousState.summary?.incidents || []).map((i) => i.id));
+  const newIncident = (nextSummary.incidents || []).find((i) => !prevIds.has(i.id));
+  if (newIncident) {
+    return { type: "incident", incident: newIncident };
+  }
+
+  return null;
+}
+
+function describeStatusChange(source, change) {
+  if (change.type === "indicator") {
+    const meta = impactMeta(normalizeIndicator(change.to));
+    return `${source.name} is now ${meta.label}`;
+  }
+  // A newly-flagged entry is called out generically rather than surfacing
+  // its raw encoded text in a toast/notification/title.
+  if (scanEventForAnomaly(change.incident).flagged) {
+    return `${source.name}: a new entry was flagged as anomalous data`;
+  }
+  const name = change.incident.name.length > 80 ? `${change.incident.name.slice(0, 77)}…` : change.incident.name;
+  return `${source.name}: new incident — ${name}`;
+}
+
+function notificationsEnabled() {
+  return typeof Notification !== "undefined" && Notification.permission === "granted" && localStorage.getItem(NOTIFY_KEY) === "on";
+}
+
+function sendBrowserNotification(message) {
+  if (!notificationsEnabled()) return;
+  try {
+    new Notification("Beacon", { body: message, icon: ORIGINAL_FAVICON_HREF });
+  } catch {
+    /* Some browsers restrict Notification construction in certain contexts; toast/in-tab alert already covered it. */
+  }
+}
+
+function handleStatusChange(source, change) {
+  const message = describeStatusChange(source, change);
+  showToast(message);
+  grabAttention(message);
+  sendBrowserNotification(message);
+}
+
+/** Wires up the "Alerts" header button: requests Notification permission
+ * on click (must be a user gesture) and remembers the on/off choice. */
+function initAlertsToggle() {
+  const btn = document.getElementById("notify-btn");
+  const label = document.getElementById("notify-btn-label");
+  const supported = typeof Notification !== "undefined";
+
+  function refresh() {
+    if (!supported) {
+      label.textContent = "Alerts unavailable";
+      btn.disabled = true;
+      return;
+    }
+    const on = notificationsEnabled();
+    label.textContent = on ? "Alerts on" : "Alerts off";
+    btn.classList.toggle("btn-active", on);
+  }
+
+  refresh();
+  if (!supported) return;
+
+  btn.addEventListener("click", async () => {
+    if (Notification.permission === "denied") {
+      showToast("Browser alerts are blocked for this page — enable them in your browser's site settings to turn this on.");
+      return;
+    }
+    if (notificationsEnabled()) {
+      localStorage.setItem(NOTIFY_KEY, "off");
+      refresh();
+      return;
+    }
+    if (Notification.permission === "default") {
+      await Notification.requestPermission();
+    }
+    if (Notification.permission === "granted") {
+      localStorage.setItem(NOTIFY_KEY, "on");
+      showToast("Alerts enabled — you'll get a browser notification if a tracked source's status changes while this tab isn't focused.");
+    }
+    refresh();
+  });
+}
+
     // ---------- modal.js ----------
 /** Wires up the "Add source" modal. Calls onSubmit({ url, name }) and lets
  * the caller decide whether/how to close (closeModal) or show an error. */
@@ -1980,10 +2187,12 @@ function updateLastUpdatedLabel() {
 }
 
 async function refreshSource(source) {
-  dataStore.set(source.id, { ...(dataStore.get(source.id) || {}), status: "loading" });
+  const previous = dataStore.get(source.id);
+  dataStore.set(source.id, { ...(previous || {}), status: "loading" });
   renderAll();
   try {
     const { summary, incidents, maintenances } = await fetchSourceData(source.baseUrl);
+    const change = detectStatusChange(previous, summary);
     dataStore.set(source.id, { status: "ready", summary, incidents, maintenances, lastUpdated: new Date() });
 
     // Fill in a nicer display name the first time we hear back, if the
@@ -1992,6 +2201,8 @@ async function refreshSource(source) {
       source.name = summary.page.name;
       persistSources(sources);
     }
+
+    if (change) handleStatusChange(source, change);
   } catch (err) {
     dataStore.set(source.id, { status: "error", error: err });
   }
@@ -2080,6 +2291,7 @@ function init() {
   initTheme();
   wireCardActions();
   initAddSourceModal({ onSubmit: addSource });
+  initAlertsToggle();
 
   refreshBtn.addEventListener("click", refreshAll);
 
